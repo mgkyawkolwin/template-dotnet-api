@@ -1,2 +1,2 @@
-# Version 1.0.1
-- Add RowVersion to BaseEntity to handle conflict
+# Version 1.0.2
+- Added .Net In-Memory Caching

@@ -10,7 +10,7 @@ public class GlobalExceptionFilter(ILogger<GlobalExceptionFilter> logger) : IExc
     {
         // Log the exception
         _logger.LogError(context.Exception, 
-            "Exception occurred: {Message}", 
+            "Exception Logged In Global Exception Filter: {Message}", 
             context.Exception.Message);
     }
 }

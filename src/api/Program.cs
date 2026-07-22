@@ -13,6 +13,7 @@ using Template.Api.Services;
 using Template.Api.Filters;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Template.Api.Caching;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +24,31 @@ var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSetting
     ?? throw new InvalidOperationException("JwtSettings section is missing from configuration.");
 var googleAuthSettings = builder.Configuration.GetSection("GoogleAuth").Get<GoogleAuthSettings>()
     ?? throw new InvalidOperationException("GoogleAuth section is missing from configuration.");
+
+// Caching
+builder.Services.AddOutputCache(options =>
+{
+    options.AddPolicy(CachePolicyKeys.StrictPerUserCache, policy =>
+    {
+        policy.Expire(TimeSpan.FromMinutes(5))
+              .SetVaryByQuery("*")
+              .VaryByValue((context) =>
+              {
+                  // 1. Get the unique User ID from JWT Claims (e.g., ClaimTypes.NameIdentifier or "sub")
+                  var userId = context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                               ?? context.User?.FindFirst("sub")?.Value;
+
+                  // 2. If unauthenticated, fallback to IP address or bypass
+                  if (string.IsNullOrEmpty(userId))
+                  {
+                      userId = context.Connection.RemoteIpAddress?.ToString() ?? "anonymous";
+                  }
+
+                  // Returns key-value entry that gets appended to the unique Cache Key
+                  return new KeyValuePair<string, string>("user_id", userId);
+              });
+    });
+});
 
 // Localization
 builder.Services.AddLocalization(options => options.ResourcesPath = "");
