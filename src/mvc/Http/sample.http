@@ -1,0 +1,27 @@
+
+@API_URL=http://127.0.0.1:5555/api
+@TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwOGRlZTdiMS03MDM3LTRhYWYtOGZjMi05ZGM4OWU2MDk1MjciLCJlbWFpbCI6ImFhQGFhLmNvbSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL25hbWUiOiJhYSIsImp0aSI6ImY2OTJlMmQ3LTAxNTMtNDlhNS05ZGZmLWNmNjllOTU5MDkzNSIsImV4cCI6MTc4NDcwNDcxNCwiaXNzIjoiVGVtcGxhdGUiLCJhdWQiOiJUZW1wbGF0ZUNsaWVudCJ9.mHcZqfFvqiqKqPX_bQHYWXe9hx3OsS0a3vzhWWBT2Pg
+
+
+
+# Check API status
+curl --request GET \
+--url {{API_URL}}
+###
+
+#
+curl --request POST \
+--url {{API_URL}}/auth/signin \
+--header 'Content-Type: application/json' \
+--data '{ \
+    "username": "aa", \
+    "password": "aa" \
+}'
+###
+
+#
+curl --request GET \
+--url {{API_URL}}/users \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer {{TOKEN}}'
+###
