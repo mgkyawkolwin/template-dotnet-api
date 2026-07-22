@@ -1,21 +1,30 @@
 using System.Net.Mail;
+using Microsoft.Extensions.Localization;
 using Template.Api.Exceptions;
 
 namespace Template.Api.Utilities;
 
 public static class ValidationHelper
 {
-    public static void ValidateRequiredString(string? value, string fieldName)
+    public static void ValidateRequiredGuid(IStringLocalizer localizer, string fieldName, Guid? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (!value.HasValue || value == Guid.Empty)
         {
-            throw new CustomException($"{fieldName} is required.");
+            throw new CustomException(localizer[$"Template.Required", fieldName]);
         }
     }
 
-    public static void ValidateEmail(string? email, string fieldName = "Email")
+    public static void ValidateRequiredString(IStringLocalizer localizer, string fieldName, string? value)
     {
-        ValidateRequiredString(email, fieldName);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new CustomException(localizer[$"Template.Required", fieldName]);
+        }
+    }
+
+    public static void ValidateEmail(IStringLocalizer localizer, string fieldName, string? email)
+    {
+        ValidateRequiredString(localizer, fieldName, email);
 
         try
         {
@@ -23,7 +32,7 @@ public static class ValidationHelper
         }
         catch
         {
-            throw new CustomException("Invalid email format.");
+            throw new CustomException(localizer[$"Template.InvalidFormat", fieldName]);
         }
     }
 }

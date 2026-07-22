@@ -28,4 +28,9 @@
   <data name="Text.ApiIsRunning" xml:space="preserve">
     <value>API အလုပ်လုပ် ေနပါသည်. Version: {0}, Environment: {1}.</value>
   </data>
+
+  <!-- ==================== ERRORS ==================== -->
+  <data name="Error.Concurrency" xml:space="preserve">
+    <value>Concurrency error occurred. Please refresh data and try again.</value>
+  </data>
 </root>

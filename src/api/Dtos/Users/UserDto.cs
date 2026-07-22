@@ -1,6 +1,6 @@
 namespace Template.Api.Dtos.Users;
 
-public sealed record UserDto
+public sealed record UserDto : DtoBase
 {
     public Guid Id { get; set; }
     public string? DisplayName { get; set; }

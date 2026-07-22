@@ -13,6 +13,8 @@ using Template.Api.Exceptions;
 using Template.Api.Models;
 using Template.Api.Utilities;
 using System.Text.Json;
+using Microsoft.Extensions.Localization;
+using Template.Api.I18N;
 
 namespace Template.Api.Services;
 
@@ -23,14 +25,16 @@ public class AuthService : IAuthService
     private readonly ILogger<AuthService> _logger;
     private readonly JwtSettings _jwtSettings;
     private readonly GoogleAuthSettings _googleAuthSettings;
+    private readonly IStringLocalizer<LocalizedStrings> _localizer;
 
-    public AuthService(AppDbContext dbContext, IPasswordHasher<UserEntity> passwordHasher, ILogger<AuthService> logger, JwtSettings jwtSettings, GoogleAuthSettings googleAuthSettings)
+    public AuthService(AppDbContext dbContext, IPasswordHasher<UserEntity> passwordHasher, ILogger<AuthService> logger, JwtSettings jwtSettings, GoogleAuthSettings googleAuthSettings, IStringLocalizer<LocalizedStrings> localizer)
     {
         _dbContext = dbContext;
         _passwordHasher = passwordHasher;
         _logger = logger;
         _jwtSettings = jwtSettings;
         _googleAuthSettings = googleAuthSettings;
+        _localizer = localizer;
     }
 
     private string CreateJwtToken(UserEntity user)
@@ -61,9 +65,9 @@ public class AuthService : IAuthService
     public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
     {
         _logger.LogDebug("CALLED: RegisterAsync(dto={Dto})", JsonSerializer.Serialize(dto));
-        ValidationHelper.ValidateRequiredString(dto.UserName, "Name");
-        ValidationHelper.ValidateEmail(dto.Email);
-        ValidationHelper.ValidateRequiredString(dto.Password, "Password");
+        ValidationHelper.ValidateRequiredString(_localizer, "Name", dto.UserName);
+        ValidationHelper.ValidateEmail(_localizer, "Email", dto.Email);
+        ValidationHelper.ValidateRequiredString(_localizer, "Password", dto.Password);
 
         var normalizedName = dto.UserName.Trim();
         var normalizedEmail = string.IsNullOrWhiteSpace(dto.Email) ? string.Empty : dto.Email.Trim().ToLowerInvariant();
@@ -71,7 +75,7 @@ public class AuthService : IAuthService
         if (await _dbContext.Users.AnyAsync(u => u.UserName == normalizedName || (!string.IsNullOrEmpty(normalizedEmail) && u.Email == normalizedEmail)))
         {
             _logger.LogWarning("Registration conflict for user {Name}", dto.UserName);
-            throw new CustomException("A user with this username or email already exists.");
+            throw new CustomException(_localizer[$"Template.AlreadyExists", "User"]);
         }
 
         var user = new UserEntity
@@ -108,8 +112,8 @@ public class AuthService : IAuthService
     public async Task<AuthResponseDto> SignInAsync(LoginDto dto)
     {
         _logger.LogDebug("CALLED: SignInAsync(dto={Dto})", JsonSerializer.Serialize(dto));
-        ValidationHelper.ValidateRequiredString(dto.Username, "Username");
-        ValidationHelper.ValidateRequiredString(dto.Password, "Password");
+        ValidationHelper.ValidateRequiredString(_localizer, "Username", dto.Username);
+        ValidationHelper.ValidateRequiredString(_localizer, "Password", dto.Password);
 
         var normalizedUsername = dto.Username.Trim();
         var normalizedEmail = normalizedUsername.Contains('@') ? normalizedUsername.ToLowerInvariant() : null;
@@ -118,17 +122,17 @@ public class AuthService : IAuthService
         if (user == null)
         {
             _logger.LogWarning("Sign-in failed for unknown username {Username}", dto.Username);
-            throw new CustomException("Invalid username or password.");
+            throw new CustomException(_localizer[$"Template.Incorrect", "Username or password"]);
         }
 
         var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, dto.Password);
         if (verificationResult == PasswordVerificationResult.Failed)
         {
-_logger.LogWarning("Sign-in failed for username {Username}: invalid password", dto.Username);
-        throw new CustomException("Invalid username or password.");
-    }
+            _logger.LogWarning("Sign-in failed for username {Username}: invalid password", dto.Username);
+            throw new CustomException(_localizer[$"Template.Incorrect", "Username or password"]);
+        }
 
-    _logger.LogInformation("User {Username} authenticated successfully", dto.Username);
+        _logger.LogTrace("User {Username} authenticated successfully", dto.Username);
 
         var token = CreateJwtToken(user);
         var response = new AuthResponseDto(

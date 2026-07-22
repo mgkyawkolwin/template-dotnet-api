@@ -9,6 +9,9 @@ public abstract class EntityBase<TKey>
     [Key]
     public TKey Id { get; set; } = default!;
     [Required]
+    [ConcurrencyCheck]
+    public Guid RowVersion { get; set; } = Guid.NewGuid();
+    [Required]
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     [Required]
     public TKey CreatedById { get; set; } = default;

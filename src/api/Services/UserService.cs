@@ -1,11 +1,13 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Localization;
 using Template.Api.Data;
 using Template.Api.Dtos;
 using Template.Api.Dtos.Users;
 using Template.Api.Entities;
 using Template.Api.Exceptions;
+using Template.Api.I18N;
 using Template.Api.Utilities;
 
 namespace Template.Api.Services;
@@ -26,13 +28,15 @@ public class UserService : IUserService
     private readonly AppDbContext _dbContext;
     private readonly IPasswordHasher<UserEntity> _passwordHasher;
     private readonly IStorageService _storageService;
+    private readonly IStringLocalizer<LocalizedStrings> _localizer;
     private readonly ILogger<UserService> _logger;
 
-    public UserService(AppDbContext dbContext, IPasswordHasher<UserEntity> passwordHasher, IStorageService storageService, ILogger<UserService> logger)
+    public UserService(AppDbContext dbContext, IPasswordHasher<UserEntity> passwordHasher, IStorageService storageService, IStringLocalizer<LocalizedStrings> localizer, ILogger<UserService> logger)
     {
         _dbContext = dbContext;
         _passwordHasher = passwordHasher;
         _storageService = storageService;
+        _localizer = localizer;
         _logger = logger;
     }
 
@@ -56,7 +60,8 @@ public class UserService : IUserService
                 Email = user.Email,
                 Address = user.Address,
                 City = user.City,
-                ProfilePictureUrl = user.ProfilePictureUrl
+                ProfilePictureUrl = user.ProfilePictureUrl,
+                RowVersion = user.RowVersion
             })
             .ToListAsync();
 
@@ -73,9 +78,9 @@ public class UserService : IUserService
     public async Task<UserDto> CreateUserAsync(CreateUserRequestDto request, Guid currentUserId)
     {
         _logger.LogDebug("CALLED: CreateUserAsync(request={Request})", request);
-        ValidationHelper.ValidateRequiredString(request.UserName, "UserName");
-        ValidationHelper.ValidateEmail(request.Email);
-        ValidationHelper.ValidateRequiredString(request.Password, "Password");
+        ValidationHelper.ValidateRequiredString(_localizer, "UserName", request.UserName);
+        ValidationHelper.ValidateEmail(_localizer, "Email", request.Email);
+        ValidationHelper.ValidateRequiredString(_localizer, "Password", request.Password);
 
         var normalizedUserName = request.UserName.Trim();
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
@@ -107,40 +112,41 @@ public class UserService : IUserService
 
     public async Task<UserDto?> UpdateUserAsync(Guid id, UpdateUserRequestDto request, Guid currentUserId)
     {
-        _logger.LogDebug("CALLED: UpdateUserAsync(id={Id}, request={Request})", id, request);
-        ValidationHelper.ValidateEmail(request.Email);
-        ValidationHelper.ValidateRequiredString(request.DisplayName, "DisplayName");
-
-        var user = await _dbContext.Users.SingleOrDefaultAsync(u => u.Id == id);
-        if (user == null)
+        try
         {
-            throw new CustomException("User not found.");
-        }
+            _logger.LogDebug("CALLED: UpdateUserAsync(id={Id}, request={Request})", id, request);
+            ValidationHelper.ValidateEmail(_localizer, "Email", request.Email);
+            ValidationHelper.ValidateRequiredString(_localizer, "DisplayName", request.DisplayName);
+            ValidationHelper.ValidateRequiredGuid(_localizer, "RowVersion", request.RowVersion);
 
-        if (!string.IsNullOrWhiteSpace(request.DisplayName))
-        {
-            user.DisplayName = request.DisplayName.Trim();
-        }
+            var user = await _dbContext.Users.SingleOrDefaultAsync(u => u.Id == id) ?? throw new CustomException("User not found.");
+            user.DisplayName = request.DisplayName ?? "";
 
-        if (!string.IsNullOrWhiteSpace(request.Email))
-        {
-            var normalizedEmail = request.Email.Trim().ToLowerInvariant();
-            var emailExists = await _dbContext.Users.AnyAsync(u => u.Id != id && u.Email == normalizedEmail);
-            if (emailExists)
+            if (!string.IsNullOrWhiteSpace(request.Email))
             {
-                throw new CustomException("A user with this email already exists.");
+                var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+                var emailExists = await _dbContext.Users.AnyAsync(u => u.Id != id && u.Email == normalizedEmail);
+                if (emailExists)
+                {
+                    throw new CustomException(_localizer[$"Template.AlreadyExists", "Email"]);
+                }
+
+                user.Email = normalizedEmail;
             }
 
-            user.Email = normalizedEmail;
+            _dbContext.Entry(user).Property(u => u.RowVersion).OriginalValue = request.RowVersion;
+            user.Address = request.Address;
+            user.City = request.City;
+            user.UpdatedAtUtc = DateTime.UtcNow;
+            user.UpdatedById = currentUserId;
+            await _dbContext.SaveChangesAsync();
+
+            return MapToDto(user);
         }
-
-        user.Address = request.Address;
-        user.City = request.City;
-        user.UpdatedAtUtc = DateTime.UtcNow;
-        user.UpdatedById = currentUserId;
-        await _dbContext.SaveChangesAsync();
-
-        return MapToDto(user);
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new CustomException(_localizer["Error.Concurrency"]);
+        }
     }
 
     public async Task<bool> DeleteUserAsync(Guid id)
@@ -155,19 +161,19 @@ public class UserService : IUserService
     public async Task<bool> ChangePasswordAsync(Guid id, ChangePasswordRequestDto request)
     {
         _logger.LogDebug("CALLED: ChangePasswordAsync(id={Id})", id);
-        ValidationHelper.ValidateRequiredString(request.CurrentPassword, "CurrentPassword");
-        ValidationHelper.ValidateRequiredString(request.NewPassword, "NewPassword");
+        ValidationHelper.ValidateRequiredString( _localizer, "CurrentPassword", request.CurrentPassword);
+        ValidationHelper.ValidateRequiredString(_localizer, "NewPassword", request.NewPassword);
 
         var user = await _dbContext.Users.SingleOrDefaultAsync(u => u.Id == id);
         if (user == null)
         {
-            throw new CustomException("User not found.");
+            throw new CustomException(_localizer[$"Template.NotFound", "User"]);
         }
 
         var verificationResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, request.CurrentPassword);
         if (verificationResult == PasswordVerificationResult.Failed)
         {
-            throw new CustomException("Current password is incorrect.");
+            throw new CustomException(_localizer[$"Template.Incorrect", "Current password"]);
         }
 
         user.PasswordHash = _passwordHasher.HashPassword(user, request.NewPassword);
@@ -181,11 +187,11 @@ public class UserService : IUserService
         _logger.LogDebug("CALLED: UploadProfilePictureAsync(id={Id}, file={FileName})", id, file?.FileName);
         if (file == null || file.Length == 0)
         {
-            throw new CustomException("A file is required.");
+            throw new CustomException(_localizer[$"Template.Required", "picture"]);
         }
 
-        var user = await _dbContext.Users.SingleOrDefaultAsync(u => u.Id == id) ?? throw new CustomException("User not found.");
-        
+        var user = await _dbContext.Users.SingleOrDefaultAsync(u => u.Id == id) ?? throw new CustomException(_localizer[$"Template.NotFound", "User"]);
+
         var objectName = await _storageService.UploadFileAsync(file);
         user.ProfilePictureUrl = objectName;
         user.UpdatedAtUtc = DateTime.UtcNow;
@@ -205,7 +211,8 @@ public class UserService : IUserService
             Email = user.Email,
             Address = user.Address,
             City = user.City,
-            ProfilePictureUrl = user.ProfilePictureUrl
+            ProfilePictureUrl = user.ProfilePictureUrl,
+            RowVersion = user.RowVersion
         };
     }
 }

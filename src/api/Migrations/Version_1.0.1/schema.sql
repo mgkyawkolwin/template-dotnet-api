@@ -1,0 +1,7 @@
+START TRANSACTION;
+ALTER TABLE `Users` ADD `RowVersion` char(36) COLLATE ascii_general_ci NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+
+INSERT INTO `__EFMigrationsHistory` (`MigrationId`, `ProductVersion`)
+VALUES ('20260722072431_Ver_1.0.1', '9.0.18');
+
+COMMIT;
